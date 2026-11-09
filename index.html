@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>狗狗在哪</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f8f1ee;--fg:#6b3f3a;--card:#fff;--btn:#8a4b45;--btnfg:#fff;--bad:#d62828}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#241c1b;--fg:#f0dcd8;--card:#322827;--btn:#c9847d;--btnfg:#241c1b;--bad:#ff6b6b}}
+:root[data-theme="dark"]{--bg:#241c1b;--fg:#f0dcd8;--card:#322827;--btn:#c9847d;--btnfg:#241c1b;--bad:#ff6b6b}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;display:flex;justify-content:center}
+main{width:100%;max-width:520px;padding:16px;text-align:center}
+h1{font-size:22px;margin:4px 0 12px}
+.bar{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+button,select{font:inherit;border:0;border-radius:10px;padding:8px 14px;background:var(--btn);color:var(--btnfg);cursor:pointer}
+select{background:var(--card);color:var(--fg);border:1px solid var(--btn)}
+input{font:inherit;width:5.5em;border-radius:10px;border:1px solid var(--btn);padding:6px 8px;background:var(--card);color:var(--fg);text-align:center}
+#best{font-size:14px;margin:-2px 0 8px;opacity:.8}
+#best.ok{color:#3dbb74;font-weight:700;opacity:1}
+#info{font-size:15px;margin:6px 0 10px;min-height:22px}
+#board{display:grid;gap:3px;background:var(--card);padding:6px;border-radius:14px;margin:0 auto;width:100%;aspect-ratio:1;touch-action:none;user-select:none;-webkit-user-select:none}
+.c{border:0;border-radius:6px;padding:0;font-size:clamp(14px,5vw,28px);line-height:1;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;position:relative}
+.c.bad{outline:3px solid var(--bad);outline-offset:-3px}
+.c.hl{outline:3px solid #ffd166;outline-offset:-3px}
+.c.tgt{outline:3px dashed #fff;outline-offset:-3px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.5)}
+#hintbox{display:none;background:var(--card);border-radius:12px;padding:10px 12px;margin:0 0 10px;text-align:left;font-size:15px;line-height:1.5}
+#hintbox button{padding:3px 10px;margin-left:6px}
+.leg{font-size:12px;opacity:.7;margin-top:4px}
+.c svg{animation:pop .22s ease-out;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))}
+@keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+.c .x{opacity:.9;font-size:.8em}
+.rules{font-size:13px;opacity:.8;margin-top:14px;line-height:1.6;text-align:left}
+#win{display:none;margin-top:12px;font-size:20px;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+<h1>🐶 狗狗在哪</h1>
+<div class="bar">
+<select id="size"></select>
+<button id="new">隨機關卡</button>
+<button id="hint">提示</button>
+<button id="clear">清空</button>
+</div>
+<div class="bar"><button id="prev" aria-label="上一關">◀</button><label>第 <input id="lv" type="number" min="1" max="99999" inputmode="numeric" value="1"> 關</label><button id="next" aria-label="下一關">▶</button></div>
+<div id="best"></div>
+<div id="info"></div>
+<div id="hintbox"></div>
+<div id="board"></div>
+<div id="win">🎉 完成！</div>
+<div class="rules">規則：每一列、每一行、每種顏色各放一隻狗狗，狗狗之間不能相鄰（含斜角）。點一下標 ✕，再點一下放狗狗，第三下清除。按住滑鼠左鍵（或手指）滑過空格可以連續標 ✕；從已有 ✕ 的格子開始滑，則是連續擦掉 ✕。</div>
+</main>
+<script>
+const COLORS=["#4db6ac","#e0b94a","#d9706e","#ea87b8","#9a7bd6","#6bb9e6","#ffa96a","#a8d58a","#a9bdd6","#f9b3cf"];
+let N=8,regions,sol,marks,t0,timer,done;
+let BREED=0;
+const BREEDS=[
+ {n:"黑白",fur:"#2d3036",line:"#14161a",patch:"#2d3036",ear:"#e9c9cf",brow:"#fff",l:"#6cc3ff",r:"#6cc3ff"}
+];
+function dog(){
+  const p=BREEDS[BREED];
+  return `<svg viewBox="0 0 64 64" width="88%" height="88%" aria-hidden="true"><path d="M8 32 L10 4 L29 16 Z M56 32 L54 4 L35 16 Z" fill="${p.fur}" stroke="${p.line}" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 25 L14 11 L23 17 Z M51 25 L50 11 L41 17 Z" fill="${p.ear}"/><ellipse cx="32" cy="38" rx="25" ry="21" fill="${p.fur}" stroke="${p.line}" stroke-width="2.5"/><path d="M32 19 Q27 27 25 33 Q12 36 11 46 Q16 57 32 57 Q48 57 53 46 Q52 36 39 33 Q37 27 32 19 Z" fill="#fff"/><ellipse cx="22" cy="36" rx="6" ry="5.4" fill="${p.patch}"/><ellipse cx="42" cy="36" rx="6" ry="5.4" fill="${p.patch}"/><circle cx="21" cy="28.5" r="2.4" fill="${p.brow}"/><circle cx="43" cy="28.5" r="2.4" fill="${p.brow}"/><ellipse cx="22" cy="36" rx="3" ry="3.3" fill="${p.l}"/><ellipse cx="22" cy="36" rx="1.3" ry="2.1" fill="#14171c"/><circle cx="22.9" cy="34.9" r=".9" fill="#fff"/><ellipse cx="42" cy="36" rx="3" ry="3.3" fill="${p.r}"/><ellipse cx="42" cy="36" rx="1.3" ry="2.1" fill="#14171c"/><circle cx="42.9" cy="34.9" r=".9" fill="#fff"/><ellipse cx="32" cy="44" rx="4.2" ry="3.2" fill="#25272c"/><ellipse cx="30.8" cy="43" rx="1.3" ry=".8" fill="#fff" opacity=".7"/><path d="M32 47 V50 M32 50 Q28.5 54 25.5 51 M32 50 Q35.5 54 38.5 51" fill="none" stroke="${p.line}" stroke-width="1.8" stroke-linecap="round"/><path d="M25.5 50.5 Q32 58 38.5 50.5 Z" fill="#5a2a33"/><path d="M28 51.5 Q27.5 61 32 62 Q36.5 61 36 51.5 Z" fill="#ff7a9c" stroke="#e0527a" stroke-width=".8" stroke-linejoin="round"/><path d="M32 53 V58.5" stroke="#e0527a" stroke-width="1" stroke-linecap="round"/></svg>`;
+}
+const $=id=>document.getElementById(id);
+const sz=$("size");
+for(let n=5;n<=10;n++){const o=document.createElement("option");o.value=n;o.textContent=n+"×"+n;if(n===8)o.selected=true;sz.appendChild(o)}
+let rnd=Math.random,level=1;
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function store(k,v){try{localStorage.setItem(k,String(v))}catch(e){}}
+function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function randomPlacement(n){
+  const cols=new Array(n);
+  const used=new Set();
+  function go(r){
+    if(r===n)return true;
+    for(const c of shuffle([...Array(n).keys()])){
+      if(used.has(c))continue;
+      if(r>0&&Math.abs(cols[r-1]-c)<=1)continue;
+      cols[r]=c;used.add(c);
+      if(go(r+1))return true;
+      used.delete(c);
+    }
+    return false;
+  }
+  return go(0)?cols:null;
+}
+
+function growRegions(n,cols){
+  const g=Array.from({length:n},()=>new Array(n).fill(-1));
+  cols.forEach((c,r)=>g[r][c]=r);
+  let left=n*n-n;
+  while(left>0){
+    const cand=[];
+    for(let r=0;r<n;r++)for(let c=0;c<n;c++){
+      if(g[r][c]!==-1)continue;
+      for(const[dr,dc]of[[1,0],[-1,0],[0,1],[0,-1]]){
+        const rr=r+dr,cc=c+dc;
+        if(rr>=0&&rr<n&&cc>=0&&cc<n&&g[rr][cc]!==-1)cand.push([r,c,g[rr][cc]]);
+      }
+    }
+    const[r,c,k]=cand[Math.floor(rnd()*cand.length)];
+    g[r][c]=k;left--;
+  }
+  return g;
+}
+
+function countSolutions(g,n,limit){
+  let count=0;const cols=new Array(n);
+  const uc=new Array(n).fill(false),ur=new Array(n).fill(false);
+  function go(r){
+    if(count>=limit)return;
+    if(r===n){count++;return}
+    for(let c=0;c<n;c++){
+      if(uc[c]||ur[g[r][c]])continue;
+      if(r>0&&Math.abs(cols[r-1]-c)<=1)continue;
+      cols[r]=c;uc[c]=ur[g[r][c]]=true;
+      go(r+1);
+      uc[c]=ur[g[r][c]]=false;
+    }
+  }
+  go(0);return count;
+}
+
+function connectedWithout(g,n,r,c,k){
+  const cells=[];for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(g[i][j]===k&&!(i===r&&j===c))cells.push([i,j]);
+  const seen=new Set([cells[0][0]*n+cells[0][1]]),q=[cells[0]];
+  while(q.length){const[x,y]=q.pop();for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){
+    const xx=x+dx,yy=y+dy;
+    if(xx<0||yy<0||xx>=n||yy>=n||g[xx][yy]!==k||(xx===r&&yy===c)||seen.has(xx*n+yy))continue;
+    seen.add(xx*n+yy);q.push([xx,yy]);}}
+  return seen.size===cells.length;
+}
+// 多解就微調區塊邊界，直到答案剩下唯一一組
+function refine(n,cols,g){
+  let cur=countSolutions(g,n,300);
+  for(let it=0;it<3000&&cur>1;it++){
+    const r=Math.floor(rnd()*n),c=Math.floor(rnd()*n);
+    if(cols[r]===c)continue;
+    const k=g[r][c],nb=[];
+    for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const x=r+dx,y=c+dy;
+      if(x>=0&&y>=0&&x<n&&y<n&&g[x][y]!==k&&!nb.includes(g[x][y]))nb.push(g[x][y]);}
+    if(!nb.length||!connectedWithout(g,n,r,c,k))continue;
+    g[r][c]=nb[Math.floor(rnd()*nb.length)];
+    const cnt=countSolutions(g,n,300);
+    if(cnt<=cur)cur=cnt;else g[r][c]=k;
+  }
+  return cur===1;
+}
+
+function generate(n){
+  for(let i=0;i<500;i++){
+    const cols=randomPlacement(n);
+    const g=growRegions(n,cols);
+    if(refine(n,cols,g)&&countSolutions(g,n,2)===1)return{g,cols};
+  }
+  return generate(n);
+}
+
+function newGame(){
+  $("info").textContent="產生關卡中…";
+  setTimeout(startGame,30);
+}
+function startGame(){
+  N=+sz.value;
+  $("lv").value=level;store("dog-lv-"+N,level);
+  rnd=mulberry((N*73856093)^(level*19349663));
+  const p=generate(N);
+  regions=p.g;sol=p.cols;
+  marks=Array.from({length:N},()=>new Array(N).fill(0));
+  done=false;clearHint();hints=0;winSecs=null;winNote="";showBest();$("win").style.display="none";
+  t0=Date.now();clearInterval(timer);timer=setInterval(tick,1000);
+  build();update();tick();
+}
+
+function build(){
+  const b=$("board");b.innerHTML="";
+  b.style.gridTemplateColumns=`repeat(${N},minmax(0,1fr))`;
+  b.style.gridTemplateRows=`repeat(${N},minmax(0,1fr))`;
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const d=document.createElement("button");
+    d.className="c";d.dataset.r=r;d.dataset.c=c;
+    d.style.background=COLORS[regions[r][c]%COLORS.length];
+    d.setAttribute("aria-label",`第${r+1}列第${c+1}行`);
+    b.appendChild(d);
+  }
+}
+
+function conflicts(){
+  const cats=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(marks[r][c]===2)cats.push([r,c]);
+  const bad=new Set();
+  for(let i=0;i<cats.length;i++)for(let j=i+1;j<cats.length;j++){
+    const[a,b]=cats[i],[x,y]=cats[j];
+    if(a===x||b===y||regions[a][b]===regions[x][y]||(Math.abs(a-x)<=1&&Math.abs(b-y)<=1)){
+      bad.add(a*N+b);bad.add(x*N+y);
+    }
+  }
+  return{cats,bad};
+}
+
+function update(){
+  const{cats,bad}=conflicts();
+  [...$("board").children].forEach((d,i)=>{
+    const r=Math.floor(i/N),c=i%N,m=marks[r][c];
+    if(d.dataset.m!==String(m)){d.dataset.m=m;d.innerHTML=m===1?'<span class="x">✕</span>':m===2?dog():""}
+    d.classList.toggle("bad",bad.has(i));
+    d.classList.toggle("hl",!!H&&H.u.includes(i));
+    d.classList.toggle("tgt",!!H&&H.t.includes(i));
+  });
+  $("info").textContent=`第 ${level} 關　狗狗 ${cats.length} / ${N}　⏱ ${fmt()}　💡 提示 ${hints} 次`;
+  if(cats.length===N&&bad.size===0){
+    if(!done){
+      winSecs=Math.floor((Date.now()-t0)/1000);
+      const key="dog-best-"+N+"-"+level,prev=load(key);
+      winNote=prev===null?"　✨ 首次解開！":winSecs<+prev?"　🏆 新紀錄！":`　最佳 ${secsFmt(+prev)}`;
+      if(prev===null||winSecs<+prev)store(key,winSecs);
+    }
+    done=true;clearInterval(timer);
+    $("win").style.display="block";
+    $("win").textContent=`🎉 完成！用時 ${fmt()}，提示 ${hints} 次${winNote}`;
+    showBest();
+  }
+}
+let winSecs=null,winNote="";
+function secsFmt(s){return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
+function fmt(){return secsFmt(done&&winSecs!==null?winSecs:Math.floor((Date.now()-t0)/1000))}
+function showBest(){
+  const v=load("dog-best-"+N+"-"+level),b=$("best");
+  b.textContent=v!==null?`✓ 已解過　最佳時間 ${secsFmt(+v)}`:"尚未解過";
+  b.classList.toggle("ok",v!==null);
+}
+function tick(){if(!done){const{cats}=conflicts();$("info").textContent=`第 ${level} 關　狗狗 ${cats.length} / ${N}　⏱ ${fmt()}　💡 提示 ${hints} 次`}}
+
+let drag=null;
+const board=$("board");
+function cellAt(e){const el=document.elementFromPoint(e.clientX,e.clientY);const d=el&&el.closest?el.closest(".c"):null;return d&&board.contains(d)?d:null}
+function paint(r,c){if(drag.mode===0&&marks[r][c]===0)marks[r][c]=1;else if(drag.mode===1&&marks[r][c]===1)marks[r][c]=0}
+board.addEventListener("pointerdown",e=>{
+  if(done)return;const d=cellAt(e);if(!d)return;e.preventDefault();
+  const r=+d.dataset.r,c=+d.dataset.c;
+  drag={r,c,mode:marks[r][c],moved:false,last:d};
+});
+board.addEventListener("pointermove",e=>{
+  if(!drag)return;
+  if(e.pointerType==="mouse"&&e.buttons===0){drag=null;return}
+  const d=cellAt(e);if(!d||d===drag.last)return;
+  drag.last=d;
+  if(drag.mode===2){drag.moved=true;return}
+  if(!drag.moved){drag.moved=true;clearHint();paint(drag.r,drag.c)}
+  paint(+d.dataset.r,+d.dataset.c);update();
+});
+window.addEventListener("pointerup",()=>{
+  if(!drag)return;
+  if(!drag.moved&&!done){clearHint();const{r,c}=drag;marks[r][c]=(marks[r][c]+1)%3;update()}
+  drag=null;
+});
+window.addEventListener("pointercancel",()=>{drag=null});
+const go=v=>{level=Math.min(99999,Math.max(1,Math.floor(+v)||1));newGame()};
+$("new").onclick=()=>go(1+Math.floor(Math.random()*99999));
+$("prev").onclick=()=>go(level-1);
+$("next").onclick=()=>go(level+1);
+$("lv").onchange=()=>go($("lv").value);
+sz.onchange=()=>{level=+load("dog-lv-"+sz.value)||1;newGame()};
+$("clear").onclick=()=>{if(done)return;clearHint();marks=marks.map(r=>r.map(()=>0));update()};
+let H=null,hints=0;
+const NAMES=["青綠","黃","紅","粉紅","紫","藍","橘","綠","灰藍","淺粉"];
+const KINDS=["row","col","reg"];
+const keyOf=(k,r,c)=>k==="row"?r:k==="col"?c:regions[r][c];
+const uname=(k,i)=>k==="row"?`第${i+1}列`:k==="col"?`第${i+1}行`:NAMES[i%10]+"色區";
+function clearHint(){H=null;$("hintbox").style.display="none"}
+function say(t,h){
+  H=h||null;
+  const b=$("hintbox");b.style.display="block";
+  b.innerHTML=t+(h&&h.apply?' <button id="ap">照做</button>':"")+(h&&(h.u.length||h.t.length)?'<div class="leg">黃框＝推理依據，虛線框＝結論</div>':"");
+  if(h&&h.apply)$("ap").onclick=()=>{h.apply();clearHint();update()};
+  update();
+}
+function combos(a,k,s=0,cur=[],out=[]){if(cur.length===k){out.push(cur.slice());return out}for(let i=s;i<a.length;i++){cur.push(a[i]);combos(a,k,i+1,cur,out);cur.pop()}return out}
+$("hint").onclick=()=>{
+  if(done)return;
+  hints++;
+  const{cats,bad}=conflicts();
+  const ix=(r,c)=>r*N+c;
+  const mark=(arr,v)=>()=>arr.forEach(i=>{marks[Math.floor(i/N)][i%N]=v});
+  if(bad.size)return say("有狗狗互相衝突（紅框）：同列、同行、同顏色或相鄰的狗狗不能並存，先移走其中一隻。");
+  for(const[r,c]of cats)if(sol[r]!==c)return say(`第 ${r+1} 列第 ${c+1} 行的狗狗放錯了，答案不在這一格。`,{u:[],t:[ix(r,c)]});
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(marks[r][c]===1&&sol[r]===c)return say(`第 ${r+1} 列第 ${c+1} 行的 ✕ 標錯了，這格其實可以放狗狗。`,{u:[],t:[ix(r,c)]});
+  const hits=(a,b,r,c)=>r===a||c===b||regions[r][c]===regions[a][b]||(Math.abs(a-r)<=1&&Math.abs(b-c)<=1);
+  // 1. 已放的狗狗會排除哪些格子
+  for(const[a,b]of cats){
+    const t=[];
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(marks[r][c]===0&&hits(a,b,r,c))t.push(ix(r,c));
+    if(t.length)return say(`第 ${a+1} 列第 ${b+1} 行已經有狗狗：同列、同行、同顏色，以及周圍一圈的格子都不能再放狗狗，可以標 ✕。`,{u:[ix(a,b)],t,apply:mark(t,1)});
+  }
+  const info={};
+  for(const k of KINDS){info[k]=[];for(let i=0;i<N;i++)info[k].push({all:[],c:[],done:false})}
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)for(const k of KINDS){
+    const u=info[k][keyOf(k,r,c)];u.all.push(ix(r,c));
+    if(marks[r][c]===2)u.done=true;else if(marks[r][c]===0)u.c.push([r,c]);
+  }
+  const und=k=>[...Array(N).keys()].filter(i=>!info[k][i].done);
+  // 2. 某列/行/區域只剩一格
+  for(const k of KINDS)for(let i=0;i<N;i++){const u=info[k][i];
+    if(!u.done&&u.c.length===1){const[r,c]=u.c[0];
+      return say(`${uname(k,i)}只剩 1 格可以放，狗狗一定在這裡。`,{u:u.all,t:[ix(r,c)],apply:()=>{marks[r][c]=2}})}}
+  // 3. n 個單位的狗狗只可能出現在同樣 n 個另一類單位裡
+  for(let n=1;n<=4;n++)for(const A of KINDS)for(const B of KINDS){
+    if(A===B)continue;
+    for(const S of combos(und(A),n)){
+      const tb=new Set();S.forEach(i=>info[A][i].c.forEach(([r,c])=>tb.add(keyOf(B,r,c))));
+      if(tb.size!==n)continue;
+      const ss=new Set(S),t=[];
+      tb.forEach(j=>info[B][j].c.forEach(([r,c])=>{if(!ss.has(keyOf(A,r,c)))t.push(ix(r,c))}));
+      if(!t.length)continue;
+      const la=S.map(i=>uname(A,i)).join("、"),lb=[...tb].map(j=>uname(B,j)).join("、");
+      const u=[];S.forEach(i=>info[A][i].c.forEach(([r,c])=>u.push(ix(r,c))));
+      return say(`${la}的狗狗只可能出現在${lb}裡，而且正好各佔一隻，所以${lb}裡其他的格子不能放狗狗，可以標 ✕。`,{u,t,apply:mark(t,1)});
+    }
+  }
+  // 4. 假設這格有狗狗，會讓別的單位沒地方放
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    if(marks[r][c]!==0)continue;
+    for(const k of KINDS)for(const i of und(k)){
+      if(keyOf(k,r,c)===i)continue;
+      if(info[k][i].c.every(([a,b])=>hits(r,c,a,b)))
+        return say(`如果在第 ${r+1} 列第 ${c+1} 行放狗狗，${uname(k,i)}就沒有地方可以放狗狗了，所以這格不能放狗狗，可以標 ✕。`,{u:info[k][i].c.map(([a,b])=>ix(a,b)),t:[ix(r,c)],apply:mark([ix(r,c)],1)});
+    }
+  }
+  say("目前盤面看不出直接的下一步。試著挑一格「假設這裡有狗狗」，往下推幾步，如果某列、某行或某個顏色區域因此沒地方放狗狗，就代表這格不能放狗狗。");
+};
+level=+load("dog-lv-"+sz.value)||1;
+newGame();
+</script>
+</body>
+</html>
